@@ -3,6 +3,8 @@
 // {type u16=0x101, key-index u8, NSA-present u8, input-flag u8, reserved[3],
 //  NSA-ID u64, UUID[16]}, followed by HMAC-SHA256(body32, selected key32).
 // The eight signing keys come only from the privately imported firmware resource.
+// An explicit LDN-only compatibility mode instead leaves the signature empty,
+// as Ryujinx did without online play history. Its acceptance by games is unproven.
 #include "friends_history.h"
 #include <CommonCrypto/CommonHMAC.h>
 #include <errno.h>
@@ -74,6 +76,10 @@ static bool firmware_keys(uint8_t keys[8][32]) {
         st.st_size == DM_FRIENDS_HISTORY_KEYRING_SIZE && exact_read(fd, keys, DM_FRIENDS_HISTORY_KEYRING_SIZE);
     close(fd); return ok;
 }
+static bool local_compatibility(void) {
+    const char *mode = getenv("DM_FRIENDS_HISTORY"), *network = getenv("DM_NETWORK");
+    return mode && !strcmp(mode, "local") && network && !strcmp(network, "ldn");
+}
 static int uuid_valid(const uint8_t uuid[16]) {
     return (uuid[6] & 0xf0) == 0x40 && (uuid[8] & 0xc0) == 0x80;
 }
@@ -125,10 +131,11 @@ uint32_t dm_friends_history_key(void *out, const void *uid_pointer, unsigned inp
     if (!present) return DM_FRIENDS_HISTORY_INVALID_UID;
     uint8_t keys[8][32] = {{0}}, result[64] = {1, 1}, uuid[16]; uint32_t status = DM_FRIENDS_HISTORY_FAIL;
     dm_guest_host_wait_begin(); pthread_mutex_lock(&history_lock);
-    if ((key_provider ? key_provider(keys) : firmware_keys(keys)) && local_uuid(uid, uuid)) {
+    bool local = local_compatibility();
+    if ((local || (key_provider ? key_provider(keys) : firmware_keys(keys))) && local_uuid(uid, uuid)) {
         uint8_t index; history_random(&index, 1); result[2] = index & 7; result[4] = input_flag & 1;
         memcpy(result+16, uuid, sizeof uuid);
-        CCHmac(kCCHmacAlgSHA256, keys[result[2]], 32, result, 32, result+32);
+        if (!local) CCHmac(kCCHmacAlgSHA256, keys[result[2]], 32, result, 32, result+32);
         memcpy(out, result, sizeof result); status = DM_FRIENDS_HISTORY_OK;
     }
     history_clear(keys, sizeof keys); history_clear(result, sizeof result);

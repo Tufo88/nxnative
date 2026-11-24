@@ -17,6 +17,8 @@ void dm_friends_history_set_key_provider(dm_friends_history_key_provider provide
 // has no linked Nintendo NSA ID: that field and its presence flag remain zero.
 // UUIDv4 is persisted atomically under DM_ROOT/friends-history (or the working
 // directory on iOS), before success. Failure clears a non-NULL 64-byte output.
+// DM_FRIENDS_HISTORY=local with DM_NETWORK=ldn returns an unsigned experimental
+// local-only record instead. It does not register play history or authenticate.
 uint32_t dm_friends_history_key(void *out, const void *uid, unsigned input_flag);
 
 #ifdef DM_FRIENDS_HISTORY_TEST

@@ -53,6 +53,19 @@ static void getter_lifetime(int which) {
 }
 
 int main(void) {
+    // The SDK's real LDN singleton is not initialized when the host takes
+    // over Initialize. Its controller-policy entry point must also be hooked.
+    assert(h_ldn_WirelessRestriction(0) == LDN_INVALID_STATE);
+    dm_ldn_context policy = {0}; assert(!pthread_mutex_init(&policy.lock, NULL));
+    policy.state = LDN_INITIALIZED; g_ldn = &policy;
+    assert(h_ldn_WirelessRestriction(0) == 0);
+    assert(h_ldn_WirelessRestriction(1) == 0);
+    assert(policy.wireless_restriction == 1);
+    assert(h_ldn_WirelessRestriction(2) == LDN_INVALID);
+    assert(policy.wireless_restriction == 1);
+    policy.state = LDN_STATION;
+    assert(h_ldn_WirelessRestriction(1) == LDN_INVALID_STATE);
+    g_ldn = NULL; pthread_mutex_destroy(&policy.lock);
     uint8_t storage[3][128];
     h_ldn_Attach(storage[0]); h_ldn_Attach(storage[1]); h_ldn_Attach(storage[0]);
     assert(count == 2); ldn_event(NULL); assert(events[0].signals == 1 && events[1].signals == 1);

@@ -34,7 +34,7 @@ typedef struct { dm_ldn_network network; struct sockaddr_in endpoint; } ldn_room
 struct dm_ldn_context {
     pthread_mutex_t lock; pthread_cond_t changed; pthread_t worker;
     dm_ldn_transport transport; dm_ldn_notify notify; void *opaque;
-    int udp, listener, wake[2], stopping, state, reason, scanning;
+    int udp, listener, wake[2], stopping, state, reason, scanning, wireless_restriction;
     dm_net_discovery_plan scan_plan,scan_supplement; uint64_t scan_next; int scan_tx_failed;
     uint64_t generation; dm_ldn_network network; dm_ldn_network_config config;
     dm_ldn_update updates[8]; ldn_peer peers[8]; ldn_room rooms[LDN_ROOM_MAX]; int room_count;
@@ -427,6 +427,18 @@ HLE_FORCE_WAIT("_ZN2nn3ldn10InitializeEv", "native ldn_mitm control transport", 
 }
 HLE_FORCE_WAIT("_ZN2nn3ldn8FinalizeEv", "stop native LDN workers and peers", void, h_ldn_Fini, void) { LDN_WRITE(); dm_ldn_context *c = g_ldn; g_ldn = NULL; for (int i = 0; i < 64; ++i) __atomic_store_n(&g_ldn_events[i], 0, __ATOMIC_RELEASE); dm_guest_host_wait_begin(); dm_ldn_stop(c); dm_guest_host_wait_end(); }
 HLE_FORCE_WAIT("_ZN2nn3ldn8GetStateEv", "native LDN service state", int, h_ldn_State, void) { LDN_USE(); return dm_ldn_state(g_ldn); }
+HLE_FORCE_WAIT("_ZN2nn3ldn32SetWirelessControllerRestrictionENS0_29WirelessControllerRestrictionE", "LDN wireless controller policy", Result, h_ldn_WirelessRestriction, int restriction) {
+    LDN_USE();
+    if (!g_ldn) return LDN_INVALID_STATE;
+    pthread_mutex_lock(&g_ldn->lock);
+    Result result = g_ldn->state != LDN_INITIALIZED ? LDN_INVALID_STATE : restriction < 0 || restriction > 1 ? LDN_INVALID : 0;
+    // The Switch policy controls radio coexistence. Local IP transport does not
+    // own the Mac's Bluetooth or Wi-Fi radios, so retain the requested policy
+    // without changing system controller connectivity.
+    if (!result) g_ldn->wireless_restriction = restriction;
+    pthread_mutex_unlock(&g_ldn->lock);
+    return ldn_hook_result("WirelessControllerRestriction", result);
+}
 HLE_FORCE("_ZN2nn3ldn22AttachStateChangeEventEPNS_2os15SystemEventTypeE", "real native LDN state event", void, h_ldn_Attach, void *ev) {
     if (!ev) return;
     hle_bind_system_event(ev, 1); uint64_t id = hle_system_event_binding(ev);

@@ -66,6 +66,24 @@ int main(void) {
     CHECK(h_fr_GetPHKey(output+1, NULL, 1) == DM_FRIENDS_HISTORY_INVALID_UID);
     CHECK(h_fr_GetPHKey(output+1, local_uid, 1) != 0 && all_zero(output+1, 64));
     CHECK(output[0] == 0x6a && output[65] == 0x6a && !wait_depth);
+    // The explicitly enabled unsigned compatibility record is available only
+    // for LDN, and never turns invalid accounts into valid local identities.
+    dm_friends_history_set_random_provider(fixed_random);
+    CHECK(!setenv("DM_FRIENDS_HISTORY", "local", 1));
+    CHECK(!setenv("DM_NETWORK", "offline", 1));
+    CHECK(h_fr_GetPHKey(output+1, local_uid, 1) != 0 && all_zero(output+1, 64));
+    CHECK(!setenv("DM_NETWORK", "ldn", 1));
+    CHECK(h_fr_GetPHKey(output+1, zero_uid, 1) == DM_FRIENDS_HISTORY_INVALID_UID && all_zero(output+1, 64));
+    CHECK(h_fr_GetPHKey(output+1, other_uid, 1) == DM_FRIENDS_HISTORY_INVALID_UID && all_zero(output+1, 64));
+    CHECK(h_fr_GetPHKey(output+1, local_uid, 1) == 0);
+    CHECK(output[1] == 1 && output[2] == 1 && output[3] <= 7 && output[4] == 0 && output[5] == 1);
+    CHECK(all_zero(output+6, 11) && all_zero(output+33, 32));
+    CHECK((output[23] & 0xf0) == 0x40 && (output[25] & 0xc0) == 0x80);
+    uint8_t local_uuid_bytes[16]; memcpy(local_uuid_bytes, output+17, 16);
+    CHECK(h_fr_GetPHKey(output+1, local_uid, 0) == 0 && output[5] == 0 && all_zero(output+33, 32));
+    CHECK(!memcmp(local_uuid_bytes, output+17, 16) && output[0] == 0x6a && output[65] == 0x6a);
+    CHECK(!unsetenv("DM_FRIENDS_HISTORY")); CHECK(!unsetenv("DM_NETWORK"));
+    dm_friends_history_set_random_provider(NULL);
     dm_friends_history_set_key_provider(unavailable);
     CHECK(h_fr_GetPHKey(output+1, local_uid, 1) != 0 && all_zero(output+1, 64));
     dm_friends_history_set_key_provider(synthetic_keys); dm_friends_history_set_random_provider(fixed_random);
