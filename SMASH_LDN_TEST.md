@@ -17,15 +17,15 @@ brew install --cask dotnet-sdk
 
 ## 2. Check out the experimental engine
 
-Once the fork owner has pushed the `codex/ldn-smash-guide` branch, replace `GITHUB_USERNAME` with that owner's GitHub username:
+Clone the experimental branch from the fork:
 
 ```sh
-git clone --branch codex/ldn-smash-guide https://github.com/GITHUB_USERNAME/nxnative.git nxnative-smash-ldn
+git clone --branch codex/ldn-smash-guide https://github.com/Tufo88/nxnative.git nxnative-smash-ldn
 cd nxnative-smash-ldn
 git config core.hooksPath .githooks
 ```
 
-This branch is based on PR revision `63fffb940cdb752c7895cd8e3d1548be15b8f85b`. Both players should use the same branch revision. This guide cannot be used from the fork until its owner creates the fork and pushes the branch.
+This branch is based on PR revision `63fffb940cdb752c7895cd8e3d1548be15b8f85b`. Both players should use the same branch revision.
 
 ## 3. Build your game
 
