@@ -106,6 +106,45 @@ static void local(void) {
     CHECK(!dm_ldn_disconnect(host, 1)); CHECK(dm_ldn_state(host) == 2 && dm_ldn_reason(host) == 3); CHECK(!dm_ldn_close(host, 1)); CHECK(dm_ldn_state(host) == 1);
     dm_ldn_stop(station); dm_ldn_stop(host);
 }
+// Four participants must all observe the same roster when a player leaves and
+// a replacement takes the vacant slot. This exercises real loopback sockets,
+// but not Smash's game traffic or four physical devices.
+static void four_players(void) {
+    unsigned port = free_port(SOCK_STREAM);
+    dm_ldn_transport ht = transport(port, port, 1);
+    dm_ldn_context *host = dm_ldn_start(&ht, NULL, NULL), *guests[4] = {0};
+    CHECK(host && !dm_ldn_open(host, 1));
+    dm_ldn_network_config cfg = config(); cfg.max_nodes = 4;
+    dm_ldn_security_config sec = security(); dm_ldn_user owner = user("host");
+    CHECK(!dm_ldn_create(host, &cfg, &sec, &owner, NULL, 0, NULL));
+    dm_ldn_network rooms[24], snapshot; dm_ldn_filter filter = {0}; int count;
+    for (int i = 0; i < 4; ++i) {
+        dm_ldn_transport t = transport(free_port(SOCK_DGRAM), port, i + 2);
+        guests[i] = dm_ldn_start(&t, NULL, NULL); CHECK(guests[i]);
+        CHECK(!dm_ldn_open(guests[i], 0));
+        CHECK(!dm_ldn_scan(guests[i], rooms, &count, 24, &filter, 0) && count == 1);
+        dm_ldn_user player = user(i == 0 ? "one" : i == 1 ? "two" : i == 2 ? "three" : "replacement");
+        if (i == 3) {
+            CHECK(dm_ldn_connect(guests[i], rooms, &sec, &player, 5, 0) != 0);
+            CHECK(!dm_ldn_disconnect(guests[1], 0));
+            CHECK(wait_nodes(host, 3, &snapshot));
+            CHECK(wait_nodes(guests[0], 3, &snapshot));
+            CHECK(wait_nodes(guests[2], 3, &snapshot));
+            CHECK(!dm_ldn_scan(guests[i], rooms, &count, 24, &filter, 0) && count == 1);
+        }
+        CHECK(!dm_ldn_connect(guests[i], rooms, &sec, &player, 5, 0));
+    }
+    CHECK(wait_nodes(host, 4, &snapshot));
+    CHECK(!strcmp(snapshot.nodes[1].name, "one"));
+    CHECK(!strcmp(snapshot.nodes[2].name, "replacement"));
+    CHECK(!strcmp(snapshot.nodes[3].name, "three"));
+    for (int i = 0; i < 4; ++i) if (i != 1) {
+        dm_ldn_network seen; CHECK(wait_nodes(guests[i], 4, &seen));
+        CHECK(!memcmp(seen.nodes, snapshot.nodes, sizeof seen.nodes));
+    }
+    for (int i = 0; i < 4; ++i) dm_ldn_stop(guests[i]);
+    dm_ldn_stop(host);
+}
 static void peer_fixture(void) {
     // Fork before creating either worker. Child and parent then own completely
     // separate contexts, descriptors, locks and address-space snapshots.
@@ -207,7 +246,7 @@ int main(void) {
 #ifdef DM_LDN_NET_TEST
     setenv("DM_NETWORK","ldn",1); CHECK(dm_net_enabled());
 #endif
-    protocol(); local(); peer_fixture();
+    protocol(); local(); peer_fixture(); four_players();
 #ifdef DM_NET_TEST
     automatic_discovery();
 #endif
